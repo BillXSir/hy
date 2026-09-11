@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<!-- #举例:下面所有 /Users/mac/... 路径按自己的家目录改;Label 前缀 com.dsh 也按自己习惯改。
+     plist 里不能写行内注释,所以标注放在这里。 -->
+<dict>
+	<key>Label</key>
+	<string>com.dsh.ecn-notify.daily</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/bin/bash</string>
+		<string>/Users/mac/dsh-workspace/ecn-notify/run-ecn.sh</string>
+	</array>
+	<key>StartCalendarInterval</key>
+	<dict>
+		<key>Hour</key>
+		<integer>9</integer>
+		<key>Minute</key>
+		<integer>15</integer>
+	</dict>
+	<key>RunAtLoad</key>
+	<false/>
+	<key>StandardOutPath</key>
+	<string>/Users/mac/dsh-workspace/ecn-notify/logs/launchd.stdout.log</string>
+	<key>StandardErrorPath</key>
+	<string>/Users/mac/dsh-workspace/ecn-notify/logs/launchd.stderr.log</string>
+</dict>
+</plist>
