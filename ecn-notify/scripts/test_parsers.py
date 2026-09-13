@@ -17,10 +17,13 @@ sys.path.insert(0, str(Path(__file__).parent))
 import ecn_notify as ecn  # noqa: E402
 
 FAILED = []
+PASS_COUNT = 0
 
 
 def check(name: str, got, want) -> None:
+    global PASS_COUNT
     if got == want:
+        PASS_COUNT += 1
         print(f"PASS {name}")
     else:
         FAILED.append(name)
@@ -29,13 +32,13 @@ def check(name: str, got, want) -> None:
 
 def test_pick_task_fields() -> None:
     task = {
-        "process_code": "ECN2601010002",
+        "process_code": "ECN2609100003",
         "title": "ECN 变更通知",
         "status": "Todo",
         "topic": "17",
     }
     got = ecn.pick_task_fields(task)
-    check("process_code 优先", got["instance_code"], "ECN2601010002")
+    check("process_code 优先", got["instance_code"], "ECN2609100003")
     check("status 读出", got["status"], "Todo")
 
     # 兜底:老结构(只有 instance_code)
@@ -51,8 +54,8 @@ def test_pick_task_fields() -> None:
 def test_parse_form_and_scrape() -> None:
     form = json.dumps(
         [
-            {"id": "w1", "name": "变更内容", "type": "textarea", "value": "示例变更内容 A"},
-            {"id": "w2", "name": "关联包材", "type": "textarea", "value": "示例包材 A, 示例包材 B"},
+            {"id": "w1", "name": "变更内容", "type": "textarea", "value": "Y40P OZT WIFI 模块 BOM 搭建"},
+            {"id": "w2", "name": "关联包材", "type": "textarea", "value": "Y40P, Y40X"},
             {
                 "id": "w3",
                 "name": "附件",
@@ -66,15 +69,15 @@ def test_parse_form_and_scrape() -> None:
         ],
         ensure_ascii=False,
     )
-    body = {"form": form, "approval_name": "ECN 变更通知", "serial_number": "2026010100003"}
+    body = {"form": form, "approval_name": "ECN 变更通知", "serial_number": "20260910003"}
     items = ecn.parse_form(body)
     check("form 解析出控件数", len(items), 3)
     check(
         "取变更内容",
         ecn.scrape_item_value(items, ["变更内容"]),
-        "示例变更内容 A",
+        "Y40P OZT WIFI 模块 BOM 搭建",
     )
-    check("取关联包材", ecn.scrape_item_value(items, ["关联包材", "包材"]), "示例包材 A, 示例包材 B")
+    check("取关联包材", ecn.scrape_item_value(items, ["关联包材", "包材"]), "Y40P, Y40X")
     check("取不到时返回空", ecn.scrape_item_value(items, ["不存在字段"]), "")
 
     atts = ecn.extract_attachments(items)
@@ -128,69 +131,69 @@ def test_json_objects() -> None:
 def test_render() -> None:
     items = [
         {
-            "instance_code": "11111111-1111-4111-8111-111111111111",
-            "serial": "2026010100225",
-            "ecn_no": "ECN2601010001",
+            "instance_code": "0DFA55D9-4D04-4EC8-A634-0358D9C25F36",
+            "serial": "202609100225",
+            "ecn_no": "ECN2609100002",
             "submitter": "示例发起人",
             "change": "BOM 搭建",
-            "packaging": "示例包材 A, 示例包材 B",
+            "packaging": "Y40P, Y40X",
             "attachments": [{"value": "u", "label": ""}],
         },
         {
-            "instance_code": "22222222-2222-4222-8222-222222222222",
-            "serial": "2026010100049",
-            "ecn_no": "B010000001 B010000002",  # 不是 ECN 号 → 退回审批单号
+            "instance_code": "5E727D5A-9329-4806-B260-D0638426FFCB",
+            "serial": "202609110049",
+            "ecn_no": "B010010955 B010010959",  # 不是 ECN 号 → 退回审批单号
             "submitter": "",
-            "change": "示例变更内容 B",
+            "change": "割草头试产 BOM 更新",
             "packaging": "",
             "attachments": [],
         },
     ]
-    start = dt.datetime(2026, 1, 1, 10, 55)
-    end = dt.datetime(2026, 1, 2, 10, 55)
-    text = ecn.render(items, ["ECN2601010003"], start, end)
+    start = dt.datetime(2026, 9, 10, 10, 55)
+    end = dt.datetime(2026, 9, 11, 10, 55)
+    text = ecn.render(items, ["ECN2609100009"], start, end)
     lines = text.splitlines()
-    check("标题=日期+分钟级时间区间", lines[0], "📋 ECN 发布通知 · 2026-01-01 10:55 ~ 2026-01-02 10:55")
+    check("标题=日期+分钟级时间区间", lines[0], "📋 ECN 发布通知 · 2026-09-10 10:55 ~ 2026-09-11 10:55")
     check("条数", lines[1], "过去 24 小时新增 2 条")
-    check("条目 1 只留变更编号", lines[3], "1. ECN2601010001")
-    check("条目 2 退回审批单号", "2. 2026010100049" in text, True)
-    check("不出现 UUID", "11111111" not in text, True)
+    check("条目 1 只留变更编号", lines[3], "1. ECN2609100002")
+    check("条目 2 退回审批单号", "2. 202609110049" in text, True)
+    check("不出现 UUID", "0DFA55D9" not in text, True)
     check("不出现 open_id / 发起人", "示例发起人" not in text, True)
     check("删掉附件行", "附件" not in text, True)
     check("变更内容入文", "   • 变更内容:BOM 搭建" in text, True)
     check("空包材写「无」", "   • 关联包材:无" in text, True)
-    check("异常说明入文", "ECN2601010003" in text, True)
+    check("异常说明入文", "ECN2609100009" in text, True)
 
 
 def test_clean_text() -> None:
     check("表单提示文案当空", ecn.clean_text("非必填选项，产品经理填写"), "")
-    check("真实内容保留", ecn.clean_text("示例包材 A, 示例包材 B"), "示例包材 A, 示例包材 B")
+    check("真实内容保留", ecn.clean_text("Y40P, Y40X"), "Y40P, Y40X")
     check("「无」当空", ecn.clean_text("无"), "")
-    check("以「无」开头的真实值不被误杀", ecn.clean_text("无尘车间专用包材"), "无尘车间专用包材")
+    check("以「无」开头的真实值不被误杀", ecn.clean_text("无锡工厂专用包材"), "无锡工厂专用包材")
 
 
 def test_display_id() -> None:
     check(
         "变更编号优先",
-        ecn.display_id({"ecn_no": "ecn2601010001", "serial": "2026010100225", "instance_code": "X"}),
-        "ECN2601010001",
+        ecn.display_id({"ecn_no": "ecn2609100002", "serial": "202609100225", "instance_code": "X"}),
+        "ECN2609100002",
     )
     check(
         "变更编号非 ECN 形态 → 审批单号",
-        ecn.display_id({"ecn_no": "B010000001", "serial": "2026010100049", "instance_code": "X"}),
-        "2026010100049",
+        ecn.display_id({"ecn_no": "B010010955", "serial": "202609110049", "instance_code": "X"}),
+        "202609110049",
     )
     check(
         "变更编号乱填 → 用附件名里的 ECN 号",
         ecn.display_id(
             {
-                "ecn_no": "B010000001 B010000002 B010000003",
-                "serial": "2026010100049",
+                "ecn_no": "B010010955 B010010959 B010010968",
+                "serial": "202609110049",
                 "instance_code": "X",
-                "attachments": [{"filename": "ECN2601010004.pdf", "local_path": None}],
+                "attachments": [{"filename": "ECN2609110001.pdf", "local_path": None}],
             }
         ),
-        "ECN2601010004",
+        "ECN2609110001",
     )
     check(
         "都没有才用 instance_code",
@@ -199,8 +202,8 @@ def test_display_id() -> None:
     )
     check(
         "下载兜底名:变更编号 → 单号 → 实例码",
-        ecn.fallback_stem({"ecn_no": "", "serial": "2026010100049", "instance_code": "X"}),
-        "2026010100049",
+        ecn.fallback_stem({"ecn_no": "", "serial": "202609110049", "instance_code": "X"}),
+        "202609110049",
     )
 
 
@@ -209,10 +212,10 @@ def test_filename_from_disposition() -> None:
     check(
         "filename*=UTF-8 优先",
         ecn.filename_from_disposition(
-            "attachment; filename=\"ECN2601010001.pdf\"; filename*=UTF-8''ECN2601010001.pdf",
+            "attachment; filename=\"ECN2609100002.pdf\"; filename*=UTF-8''ECN2609100002.pdf",
             "fallback.pdf",
         ),
-        "ECN2601010001.pdf",
+        "ECN2609100002.pdf",
     )
     check(
         "中文名 URL 解码",
@@ -227,14 +230,14 @@ def test_filename_from_disposition() -> None:
         ecn.filename_from_disposition('attachment; filename="a b.pdf"', "fallback.pdf"),
         "a b.pdf",
     )
-    check("没有头就用兜底名", ecn.filename_from_disposition("", "ECN2601010001.pdf"), "ECN2601010001.pdf")
+    check("没有头就用兜底名", ecn.filename_from_disposition("", "ECN2609100002.pdf"), "ECN2609100002.pdf")
     traversal = ecn.safe_filename("../../etc/passwd")
     check("路径穿越:分隔符被清", "/" not in traversal and "\\" not in traversal, True)
     check("路径穿越:不以 . 开头", traversal.startswith("."), False)
     check(
         "带中文的兜底名",
-        ecn.filename_from_disposition("attachment", "ECN2601010001.pdf"),
-        "ECN2601010001.pdf",
+        ecn.filename_from_disposition("attachment", "ECN2609100002.pdf"),
+        "ECN2609100002.pdf",
     )
 
 
@@ -250,10 +253,149 @@ def test_unique_path() -> None:
 
 
 def test_merge_state() -> None:
-    """--ignore-state 补发时写回也必须是并集,不能覆盖历史(旧版直接覆盖)。"""
-    check("并集去重", ecn.merge_state(["a", "b"], ["b", "c"]), ["a", "b", "c"])
-    check("空历史", ecn.merge_state([], ["x"]), ["x"])
-    check("空新增保留历史", ecn.merge_state(["x"], []), ["x"])
+    """写回状态永远是并集:补发不能覆盖历史,告警冷却不能被旧记录顶掉。"""
+    known = {"sent": {"a": "2026-09-01T10:00:00"}, "alerts": {"x": "2026-09-13T09:00:00"}}
+    new = {"sent": {"b": "2026-09-02T10:00:00"}, "alerts": {"x": "2026-09-14T09:00:00"}}
+    got = ecn.merge_state(known, new)
+    check("去重表并集", sorted(got["sent"]), ["a", "b"])
+    check("时间戳冲突取更早(窗口更保守)", got["sent"]["a"], "2026-09-01T10:00:00")
+    check("告警记录取更新", got["alerts"]["x"], "2026-09-14T09:00:00")
+    check("空新增保留历史", ecn.merge_state({"sent": {"x": "t"}, "alerts": {}}, {"sent": {}, "alerts": {}})["sent"], {"x": "t"})
+    check("空历史", ecn.merge_state({"sent": {}, "alerts": {}}, {"sent": {"y": "t"}, "alerts": {}})["sent"], {"y": "t"})
+
+
+def test_resolve_window_start() -> None:
+    """滚动窗口兜底:机器睡了 30h 再唤醒,窗口左界要退到最早未发条目的记录时间。"""
+    now = 1_772_000_000
+    day = 86400
+    # 状态为空 → 固定窗口
+    check("空状态用固定窗口", ecn.resolve_window_start(now, day, {}, True)[0], now - day)
+    check("关掉 rolling 用固定窗口", ecn.resolve_window_start(now, day, {"x": "whatever"}, False)[0], now - day)
+
+    # 上次成功跑在 32h 前(睡了 30h 的场景):左界退到那时,再留 5 分钟余量
+    old = dt.datetime.fromtimestamp(now - 32 * 3600)
+    start, note = ecn.resolve_window_start(now, day, {"a": old.isoformat()}, True)
+    check("缺口被兜住", start, int(old.timestamp()) - 300)
+    check("标注滚动兜底", "滚动兜底" in note, True)
+
+    # 状态记录比固定窗口新(正常一天一跑)→ 不退,保持 24h
+    recent = dt.datetime.fromtimestamp(now - 3 * 3600)
+    start, note = ecn.resolve_window_start(now, day, {"a": recent.isoformat()}, True)
+    check("正常情况不放大窗口", start, now - day)
+    check("标注固定窗口", "固定窗口" in note, True)
+
+    # 多条状态时取最早的那条
+    older = dt.datetime.fromtimestamp(now - 50 * 3600)
+    start, _ = ecn.resolve_window_start(now, day, {"a": recent.isoformat(), "b": older.isoformat()}, True)
+    check("取最早记录当左界", start, int(older.timestamp()) - 300)
+
+    # 时间戳坏的不能炸
+    check("坏时间戳退回固定窗口", ecn.resolve_window_start(now, day, {"a": "not-a-date"}, True)[0], now - day)
+
+
+def test_parse_ts() -> None:
+    parsed = ecn.parse_ts("2026-09-14T09:15:00")
+    check("naive 时间戳补本地时区", parsed.tzinfo is not None, True)
+    check("坏值返回 None", ecn.parse_ts("nope"), None)
+    check("缺值返回 None", ecn.parse_ts(None), None)
+
+
+def test_state_roundtrip() -> None:
+    """状态文件读写 + 旧格式(纯数组)自动迁移。"""
+    import tempfile as _tf
+    from pathlib import Path as _P
+
+    with _tf.TemporaryDirectory() as tmp:
+        original = ecn.STATE_FILE
+        try:
+            ecn.STATE_FILE = _P(tmp) / "ecn_sent.json"
+            check("文件不存在返回空结构", ecn.load_state(), {"sent": {}, "alerts": {}})
+
+            ecn.STATE_FILE.write_text(json.dumps(["CODE-1", "CODE-2"]), encoding="utf-8")
+            migrated = ecn.load_state()
+            check("旧格式条目保留", sorted(migrated["sent"]), ["CODE-1", "CODE-2"])
+            check("旧格式补时间戳", bool(ecn.parse_ts(migrated["sent"]["CODE-1"])), True)
+            check("旧格式无告警记录", migrated["alerts"], {})
+
+            new_state = {"sent": {"CODE-1": "2026-09-01T09:15:00"}, "alerts": {"抄送查询失败": "2026-09-14T09:15:00"}}
+            ecn.save_state(new_state)
+            check("写回可读", ecn.load_state(), new_state)
+
+            ecn.STATE_FILE.write_text("{ not json", encoding="utf-8")
+            check("坏文件不炸", ecn.load_state(), {"sent": {}, "alerts": {}})
+        finally:
+            ecn.STATE_FILE = original
+
+
+def test_classify_error() -> None:
+    """错误分类:决定要不要重试、告警文案怎么写。"""
+    check("授权失效", ecn.classify_error("need_user_authorization: user token missing"), "auth")
+    check("refresh token 复用", ecn.classify_error("refresh_token_reused"), "auth")
+    check("网络超时", ecn.classify_error("lark-cli timeout"), "network")
+    check("DNS 解析失败", ecn.classify_error("getaddrinfo ENOTFOUND open.feishu.cn"), "network")
+    check("连接被拒", ecn.classify_error("connect ECONNREFUSED 10.0.0.1:443"), "network")
+    check("权限被拒", ecn.classify_error("1069303 Access denied"), "permission")
+    check("未知出错归 other", ecn.classify_error("something odd"), "other")
+    check("空值不炸", ecn.classify_error(""), "other")
+
+
+def test_alerter() -> None:
+    """告警:冷却去重 + dry-run 不发 + 发送失败不抛。"""
+    calls: list[list[str]] = []
+    original = ecn.run_cli
+
+    def fake_run_cli(args, cwd=None):
+        calls.append(list(args))
+        return True, {"ok": True, "data": {"message_id": "om_x"}}
+
+    ecn.run_cli = fake_run_cli
+    try:
+        a = ecn.Alerter(enabled=True, known={})
+        check("首次告警发出", a.notify("抄送查询失败", "网络不通"), True)
+        check("同类 20h 内不重复", a.notify("抄送查询失败", "网络不通"), False)
+        check("实际只调了一次 CLI", len(calls), 1)
+        check("发的是私聊接口", calls[0][:4], ["im", "+messages-send", "--user-id", ecn.ALERT_USER_ID])
+        check("收件人是 Bill", ecn.ALERT_USER_ID.startswith("ou_"), True)
+        check("告警记录落状态", "抄送查询失败" in a.state(), True)
+
+        # 冷却期内的历史记录来自状态文件 → 也不能重复报
+        old = (dt.datetime.now() - dt.timedelta(hours=1)).isoformat(timespec="seconds")
+        cooled = ecn.Alerter(enabled=True, known={"抄送查询失败": old})
+        check("历史记录参与冷却", cooled.notify("抄送查询失败", "x"), False)
+
+        expired = (dt.datetime.now() - dt.timedelta(hours=30)).isoformat(timespec="seconds")
+        fresh = ecn.Alerter(enabled=True, known={"抄送查询失败": expired})
+        check("超过冷却期可以再报", fresh.notify("抄送查询失败", "x"), True)
+
+        # enabled=False(dry-run / --no-alert)一律不发
+        before = len(calls)
+        off = ecn.Alerter(enabled=False, known={})
+        check("关掉告警不发", off.notify("脚本异常退出", "x"), False)
+        check("关掉告警不调 CLI", len(calls), before)
+
+        # CLI 报错时不能抛,也不能写冷却记录
+        def failing(args, cwd=None):
+            calls.append(list(args))
+            return False, "send failed"
+
+        ecn.run_cli = failing
+        err = ecn.Alerter(enabled=True, known={})
+        check("发送失败不抛", err.notify("简报发送失败", "x"), False)
+        check("发送失败不记冷却", err.state(), {})
+    finally:
+        ecn.run_cli = original
+
+
+def test_render_without_failure_note() -> None:
+    """没有失败条目时不要多出「异常说明」一行。"""
+    items = [{
+        "instance_code": "X", "serial": "202609100225", "ecn_no": "ECN2609100002",
+        "submitter": "", "change": "变更", "packaging": "", "attachments": [],
+    }]
+    start = dt.datetime(2026, 9, 10, 10, 55)
+    end = dt.datetime(2026, 9, 11, 10, 55)
+    text = ecn.render(items, [], start, end)
+    check("无失败不写异常说明", "异常说明" in text, False)
 
 
 if __name__ == "__main__":
@@ -264,13 +406,19 @@ if __name__ == "__main__":
     test_dedup_attachments()
     test_json_objects()
     test_render()
+    test_render_without_failure_note()
     test_clean_text()
     test_display_id()
     test_filename_from_disposition()
     test_unique_path()
     test_merge_state()
+    test_resolve_window_start()
+    test_parse_ts()
+    test_state_roundtrip()
+    test_classify_error()
+    test_alerter()
     print()
     if FAILED:
         print(f"{len(FAILED)} 项失败: {', '.join(FAILED)}")
         sys.exit(1)
-    print("全部通过")
+    print(f"全部通过({PASS_COUNT} 项)")

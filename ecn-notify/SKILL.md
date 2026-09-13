@@ -1,26 +1,22 @@
 ---
 name: ecn-notify
-description: 拉取飞书 ECN 审批抄送(审批定义 code 见脚本常量,抄送 topic 17 未读 / 18 已读),把过去 24h 新增 ECN 简报以 bot 身份发到目标群,附件挂话题,并维护去重状态。用于运行、调试、改动或排查这条 ECN 通知流水线。
+description: 拉取飞书 ECN 审批抄送(审批定义 code 见脚本常量,抄送 topic 17 未读 / 18 已读),把过去 24h 新增 ECN 简报以 bot 身份发到目标群,附件挂话题,维护去重状态与滚动窗口兜底,失败时私聊告警。用于运行、调试、改动或排查这条 ECN 通知流水线。
 metadata:
-  short-description: ECN 抄送简报推送到目标群
+  short-description: ECN 抄送简报推送到群 + 失败私聊告警
 ---
 
 # ECN 通知(ECN 抄送简报)
 
 每天把 ECN 抄送(未读 topic 17 / 已读 topic 18)里过去 24h 的新条目,汇总成一条简报发到
-目标群(群名与 chat_id 属内部标识,这里不放真实值;填 `scripts/ecn_notify.py` 顶部的 `CHAT_ID`),
-附件以话题回复挂载;主聊天只有 1 条总结 + 「N 条回复」。无新 ECN 则完全静默。
-
-> **脱敏说明**:本文件里的本机路径、profile 名都是**举例**(标 `#举例`),照自己环境改;
-> 群 chat_id、审批定义 code、实例 UUID 这类内部标识一律用占位符,真实值不进仓库。
-> **仓库里不含任何 token / 密钥**——凭据只存在本机 `lark-cli` 的 profile 里,靠 `lark-cli auth login` 走 OAuth 拿到,代码里一个字都不出现。
+目标群(群名与 chat_id 属内部标识,这里不放真实值;填 `scripts/ecn_notify.py` 顶部的 `CHAT_ID`),附件以话题回复挂载;
+主聊天只有 1 条总结 + 「N 条回复」。无新 ECN 则完全静默;**真失败会私聊告警**(0 条和休眠跑晚都不算失败)。
 
 ## 执行
 
 ```bash
 # 正常跑(定时/手动一致)
-bash /Users/mac/dsh-workspace/ecn-notify/run-ecn.sh            #举例:路径按自己的运行目录改
-# 只渲染不发送、不写状态(会把附件下载下来、打印还原后的真实文件名)
+bash /Users/mac/dsh-workspace/ecn-notify/run-ecn.sh
+# 只渲染不发送、不写状态、不发告警(会把附件下载下来、打印还原后的真实文件名)
 bash /Users/mac/dsh-workspace/ecn-notify/run-ecn.sh --dry-run
 # 无视去重表重放一遍(核对格式最顺手;写回与磁盘状态取并集,不会冲掉历史)
 bash /Users/mac/dsh-workspace/ecn-notify/run-ecn.sh --dry-run --ignore-state
@@ -28,23 +24,26 @@ bash /Users/mac/dsh-workspace/ecn-notify/run-ecn.sh --dry-run --ignore-state
 bash /Users/mac/dsh-workspace/ecn-notify/run-ecn.sh --ignore-state --window 3600
 # 自定义回看窗口(秒)
 bash /Users/mac/dsh-workspace/ecn-notify/run-ecn.sh --window 3600
+# 关掉滚动窗口兜底 / 关掉私聊告警(排查用)
+bash /Users/mac/dsh-workspace/ecn-notify/run-ecn.sh --no-rolling --no-alert
 ```
 
 逻辑都在 `scripts/ecn_notify.py`(纯标准库,不改逻辑就别重写):
-拉抄送 → 按 `instance_code` 去重 → 取实例详情 → **下载附件并还原真实文件名** → 渲染 markdown
-→ bot 发群 → 附件 `--reply-in-thread`(按本地文件名上传) → 写回 `ecn_sent.json`。
+算窗口(滚动兜底)→ 拉抄送 → 按 `instance_code` 去重 → 取实例详情 → **下载附件并还原真实文件名**
+→ 渲染 markdown → bot 发群 → 附件 `--reply-in-thread`(按本地文件名上传)
+→ 写回 `ecn_sent.json`(去重表 + 告警冷却记录)。失败按分类重试,真失败私聊告警。
 
-改解析逻辑后跑离线自测(不联网、不调 CLI):
+改解析逻辑后跑离线自测(不联网、不调 CLI,89 项;窗口兜底、告警冷却、状态迁移都在里面):
 
 ```bash
-/usr/bin/python3 /Users/mac/.codex/skills/ecn-notify/scripts/test_parsers.py   #举例:skill 目录按自己的位置改
+/usr/bin/python3 /Users/mac/.codex/skills/ecn-notify/scripts/test_parsers.py
 ```
 
 ## 简报格式约定(2026-09-11 按反馈定稿,别改回去)
 
 - **标题**:`📋 ECN 发布通知 · <起始 时分> ~ <结束 时分>`——日期后面直接跟时间区间,精确到分钟
 - **每条开头只写一个编号**:优先表单「变更编号」里的 ECN 号 → 再退到附件文件名里的 ECN 号
-  (有的单子变更编号栏被填成 B0 物料码,真 ECN 号只在附件名里,如 `ECN2601010004.pdf`)
+  (有的单子变更编号栏被填成 B0 物料码,真 ECN 号只在附件名里,如 `ECN2609110001.pdf`)
   → 最后退到审批单编号 `serial_number`。**不写** UUID / instance_code / open_id / 发起人
 - **不写「附件:N」这一行**(附件本体在话题里,计数没用)
 - 表单默认提示文案(如「非必填选项,产品经理填写」)当空处理,渲染成「无」
@@ -58,7 +57,7 @@ bash /Users/mac/dsh-workspace/ecn-notify/run-ecn.sh --window 3600
 `authcode`,连扩展名都没有。** 这就是「下载出来为啥是 authcode」的原因。
 
 正解(脚本已实现):自己 `urllib` 下载 → 从响应头 `Content-Disposition`
-(`filename*=UTF-8''...`)取真实文件名(实测 `ECN2601010001.pdf`,文件名为举例)→ 落盘到临时目录
+(`filename*=UTF-8''...`)取真实文件名(实测 `ECN2609100002.pdf`)→ 落盘到临时目录
 → `--file <文件名>` + `cwd=<临时目录>` 上传(lark-cli 只吃 cwd 相对路径,绝对路径和 `..` 会被拒)。
 
 顺序上**先下载再渲染再发送**:条目开头的编号要用附件文件名里的 ECN 号。
@@ -97,32 +96,99 @@ access_token,飞书同时下发**新的 refresh_token**(旧的作废,复用会�
 - 你在飞书里撤销了应用授权、改密码,或管理员改了应用权限
 - 换机器 / `lark-cli auth logout`
 
-脚本每次开跑会打一行 `user 身份就绪,refresh token 剩余 N 天`;不足 2 天会打 WARN。
-看到 WARN 就在**私聊**里重新走一遍 device flow:
+脚本每次开跑会打一行 `user 身份就绪,refresh token 剩余 N 天`;不足 2 天会打 WARN
+**并主动私聊告警**(见下面「失败主动私聊告警」)。看到就在**私聊**里重新走一遍 device flow:
 
 ```bash
 lark-cli auth login --no-wait --json --domain approval,im   # 拿 verification_url 原样发给用户
 lark-cli auth login --device-code <code>                    # 前台阻塞到用户点完
 ```
 
+## 错误分类与重试(2026-09-14 加)
+
+`run_cli_retry()`:只有**网络/服务端类**错误才重试(最多 3 次,固定间隔 5 秒)。
+授权、权限类错误直接返回——重试是白等。
+
+`classify_error()` 按错误文案归类(auth / network / permission / other):
+
+| 归类 | 命中关键词(节选) | 处理 |
+|------|------------------|------|
+| auth | `need_user_authorization`、`token_missing`、`refresh_token`、`401` | 不重试,告警让人重新授权 |
+| network | `timeout`、`connection`、`getaddrinfo`、`ECONNREFUSED`、`502/503/504`、`429` | 重试 3 次,仍失败则告警 |
+| permission | `access denied`、`1069303`、`403`、`scope`、`not in chat` | 不重试,告警 |
+| other | 其余 | 重试 3 次,仍失败则告警 |
+
+为什么重试:9:15 正好是 Mac 从 DarkWake 醒来、WiFi 还在重连的窗口,连接/DNS 失败很常见。
+间隔故意固定 5 秒不指数退避——DarkWake 只有 40~45 秒,不能等太久。
+
+## 失败主动私聊告警(2026-09-14 加)
+
+**为什么需要**:从你视角看,「今天没有 ECN」和「跑了但失败了」长得一模一样——群里都是没消息。
+所以真失败时,bot 主动私聊你一条;日常成功则一个字都不发。
+
+| 情况 | 报警 | 说明 |
+|------|------|------|
+| 今天 0 条 ECN | ❌ 静默 | 正常,不是故障 |
+| 电脑休眠导致跑晚几分钟 | ❌ 静默 | launchd 醒来会补跑,滚动窗口不漏 |
+| 全部 topic 查询失败(网络断 / 飞书不通) | ✅ | 重试 3 次仍失败才报 |
+| 部分 topic 查询失败 | ✅ | 简报可能不全 |
+| user 授权失效(`need_user_authorization`) | ✅ | 附重新授权指引 |
+| refresh token 剩余 < 2 天 | ✅ | 提前预警,免得真掉线 |
+| 实例详情全部拉取失败 | ✅ | 本次没发简报 |
+| 总结消息发送失败 | ✅ | 数据取到了但没发进群 |
+| 部分 ECN 详情失败 / 部分附件没发进话题 | ✅ | 群里看不出痕迹的失败,必须报 |
+| 未捕获异常 | ✅ | 带异常类型与信息 |
+| 单个附件下载失败(其余正常) | ❌ 只写日志 | 噪声太大,不值得打扰 |
+
+- 冷却:**同一类告警 20 小时内最多一条**(下次日跑 9:15 超过 20h,所以每天最多一条同类)。
+  记录存在 `ecn_sent.json` 的 `alerts` 字段里。
+- 私聊对象:Bill 的 open_id(`ALERT_USER_ID`,bot 身份发)。
+- `--dry-run` / `--no-alert`:一律不发,只写日志。
+- 告警自身失败**绝不影响主流程**(只记 WARN)。
+- 想确认告警链路还通:手工触发一次即可,别等真出事:
+  `python3 -c "import sys;sys.path.insert(0,'<skill>/scripts');import ecn_notify as e;e.Alerter(True,{}).notify('联调测试','测试')"`
+
 ## 状态与日志
 
 | 文件 | 作用 |
 |------|------|
-| `/Users/mac/dsh-workspace/ecn-notify/ecn_sent.json` #举例 | 已发 instance_code,防止重复推送。误清空 = 当天重发 |
-| `/Users/mac/dsh-workspace/ecn-notify/logs/run.log` #举例 | 每次运行的逐条日志(topic 命中数、失败项、message_id) |
-| `/Users/mac/dsh-workspace/ecn-notify/logs/launchd.log` #举例 | launchd 触发记录 |
+| `/Users/mac/dsh-workspace/ecn-notify/ecn_sent.json` | 去重表 + 告警冷却记录,防止重复推送/重复告警。误清空 = 当天重发 |
+| `/Users/mac/dsh-workspace/ecn-notify/logs/run.log` | 每次运行的逐条日志(topic 命中数、失败项、message_id、告警) |
+| `/Users/mac/dsh-workspace/ecn-notify/logs/launchd.log` | launchd 触发记录 |
+
+`ecn_sent.json` 结构(2026-09-14 起改造,旧的纯数组格式**读的时候自动迁移**):
+
+```json
+{
+  "sent":   { "<instance_code>": "2026-09-14T09:15:03+08:00" },
+  "alerts": { "<告警类型>":      "2026-09-14T09:15:04+08:00" }
+}
+```
+
+`sent` 的时间戳就是**滚动窗口**要用的「这条是什么时候发的」。
 
 排查先看 `run.log` 最后一段。静默(0 条)是正常行为,不是故障。
+
+## 滚动窗口兜底(2026-09-14 加)
+
+窗口左界 = `min(now - 86400, 状态里最早的 sent 时间戳 - 5 分钟)`。
+
+**堵的缺口**:旧逻辑左界写死 `now-86400`,不看上次跑到哪。机器关机 / 休眠超过 24 小时再唤醒时,
+最早那几小时里发生的 ECN 从来没进过窗口,以后也不会自动补——这是之前唯一的实质性漏发缺口。
+现在窗口会自动退到「上次发过的最早那条的记录时间」,把缺口捞回来;重复推送由去重表挡住。
+
+- 正常每天一跑时,状态里的时间戳都比 `now-86400` 新 → 保持标准 24h 窗口,行为不变
+- 真补出缺口时日志会写明:`滚动兜底(补上次缺口 X.Xh)`
+- 排查想回旧行为:`--no-rolling`
 
 ## 定时
 
 launchd,每天 9:15 本地时间:
 
 ```bash
-launchctl load -w /Users/mac/dsh-workspace/ecn-notify/com.dsh.ecn-notify.daily.plist     #举例
+launchctl load -w /Users/mac/dsh-workspace/ecn-notify/com.dsh.ecn-notify.daily.plist
 launchctl start com.dsh.ecn-notify.daily      # 手动触发一次
-launchctl unload -w /Users/mac/dsh-workspace/ecn-notify/com.dsh.ecn-notify.daily.plist   #举例
+launchctl unload -w /Users/mac/dsh-workspace/ecn-notify/com.dsh.ecn-notify.daily.plist
 ```
 
 不装 `RunAtLoad`、不做闲时预跑:24h 滚动窗口对时间敏感,凌晨预跑会漏掉 3-9 点发生的 ECN。
@@ -131,4 +197,4 @@ launchctl unload -w /Users/mac/dsh-workspace/ecn-notify/com.dsh.ecn-notify.daily
 
 命令差异、静默规则、字段名坑、故障排查表:
 [references/ecn-notify.md](references/ecn-notify.md)。
-字段名研究报告(官方文档 + SDK 原文留档):`/Users/mac/dsh-workspace/审批API研究/飞书审批API字段报告.md` #举例(本机留档,不在本仓库)。
+字段名研究报告(官方文档 + SDK 原文留档):`/Users/mac/dsh-workspace/审批API研究/飞书审批API字段报告.md`。
