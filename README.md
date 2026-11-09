@@ -13,6 +13,30 @@
 |------|------|
 | `ecn-notify/` | 飞书 ECN 抄送简报:每 24h 拉审批抄送,汇总发到飞书群,附件挂话题,失败私聊告警 |
 | `Feishu-daily-report/` | 飞书每日工作日报:从 IM / 文档 / 任务 / 邮件多维度拉当日数据,生成 bullet 式日报 |
+| `machine-repair/` | 现场设备维修手册 + 可执行脚本:每个问题一个目录,默认"先跑安全模式拿判定再分析" |
+
+## machine-repair
+
+现场设备(机器人 / 边缘盒子)的维修操作手册。核心是**每个问题都有一条安全的一键命令**:默认只读或可逆,
+不写文件、不重启、不碰固件,先拿到明确 verdict 再决定要不要动系统。破坏性与持久化动作一律藏在显式参数后面。
+
+```
+machine-repair/
+├── README.md                                      总纲:铁律、目录约定、新增问题模板
+└── bluetooth-dead-hci0/                           蓝牙"僵尸 hci0"(适配器在但从未初始化)
+    ├── README.md                                  症状指纹 → 判定表 → 修复阶梯 → 回滚
+    ├── bt-dead-hci0.sh                            一键脚本(diagnose/fix/install/uninstall)
+    └── case-yarbo-firmware-race.md                真实案例:开机竞速导致固件 ENOENT
+```
+
+当前收录的问题:
+
+| 问题 | 症状指纹 |
+|---|---|
+| 蓝牙"僵尸 hci0" | `hciconfig` 有 `hci0`,但 `DOWN` + `BD Address: 00:00:00:00:00:00` + `Features` 全零 |
+
+详见 `machine-repair/README.md`。
+
 
 ## ecn-notify
 
