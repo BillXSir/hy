@@ -53,6 +53,31 @@ sudo ./bt-dead-hci0.sh --uninstall   # 回滚持久化改动
 # 通用: --quiet(精简输出, 给 systemd 日志用)  --no-color
 ```
 
+## 多台设备 / 远程速操作
+
+`deploy-remote.sh` 把「上传 → 诊断 → 持久化 → 重启验证」串成一条命令，适合一台接一台地修：
+
+```bash
+cd machine-repair/bluetooth-dead-hci0
+
+./deploy-remote.sh YARBO@10.0.0.5                      # 诊断 + 修当次（安全模式，不写文件）
+./deploy-remote.sh YARBO@10.0.0.5 --install            # 再加开机自愈（默认顺带屏蔽 rtl_btusb）
+./deploy-remote.sh YARBO@10.0.0.5 --install --reboot   # 装完重启并验证持久化生效
+./deploy-remote.sh YARBO@10.0.0.5 --diagnose           # 只读复诊
+./deploy-remote.sh YARBO@10.0.0.5 --uninstall          # 回滚持久化改动
+```
+
+只依赖系统自带 `ssh` / `scp`；密码交互输入，用 ControlMaster 复用，整个流程只输一次。脚本里不含凭据。
+
+看第一次输出里的 verdict 决定要不要加 `--install`：
+
+| 首轮输出 | 动作 |
+|---|---|
+| `OK` | 底层没问题，转查配对 / 应用层；若重启后复现再加 `--install` |
+| `ZOMBIE` + `fw=RACE` | `--install --reboot` |
+| `ZOMBIE` + `fw=MISSING` | 先补固件，**别加 --install**（不会有用） |
+| `NO_ADAPTER` | 硬件 / 驱动未加载，本方案不适用 |
+
 ## 判定表
 
 脚本给出四种 verdict：

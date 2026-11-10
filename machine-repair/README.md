@@ -24,6 +24,12 @@
 |---|---|---|
 | `bluetooth-dead-hci0/` | `hciconfig` 有 `hci0`，但 `DOWN` + `BD Address: 00:00:00:00:00:00` + `Features` 全零 | `sudo ./bluetooth-dead-hci0/bt-dead-hci0.sh` |
 
+多台设备可以连带远程流程一起跑：
+
+```bash
+machine-repair/bluetooth-dead-hci0/deploy-remote.sh YARBO@10.0.0.5 --install --reboot
+```
+
 ## 目录约定
 
 ```
