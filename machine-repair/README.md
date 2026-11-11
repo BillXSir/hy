@@ -23,6 +23,7 @@
 | 目录 | 症状指纹 | 一键操作 |
 |---|---|---|
 | `bluetooth-dead-hci0/` | `hciconfig` 有 `hci0`，但 `DOWN` + `BD Address: 00:00:00:00:00:00` + `Features` 全零 | `sudo ./bluetooth-dead-hci0/bt-dead-hci0.sh` |
+| `greengrass-ota-stuck-defer/` | `service-update-deferred` 每 10~12s 刷一条 + `deployments/ongoing` 长时间不消失 + 目标版本包**已在位** | `sudo ./greengrass-ota-stuck-defer/ota-stuck-defer.sh` |
 
 多台设备可以连带远程流程一起跑（`deploy-remote.sh` 默认目标 `YARBO@37.38.39.8`，不带参数即可）：
 

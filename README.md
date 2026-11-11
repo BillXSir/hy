@@ -23,11 +23,16 @@
 ```
 machine-repair/
 ├── README.md                                      总纲:铁律、目录约定、新增问题模板
-└── bluetooth-dead-hci0/                           蓝牙"僵尸 hci0"(适配器在但从未初始化)
-    ├── README.md                                  症状指纹 → 判定表 → 修复阶梯 → 回滚
-    ├── bt-dead-hci0.sh                            一键脚本(diagnose/fix/install/uninstall)
-    ├── deploy-remote.sh                           远程部署器(默认目标 37.38.39.8,一条命令修一台)
-    └── case-yarbo-firmware-race.md                真实案例:开机竞速导致固件 ENOENT
+├── bluetooth-dead-hci0/                           蓝牙"僵尸 hci0"(适配器在但从未初始化)
+│   ├── README.md                                  症状指纹 → 判定表 → 修复阶梯 → 回滚
+│   ├── bt-dead-hci0.sh                            一键脚本(diagnose/fix/install/uninstall)
+│   ├── deploy-remote.sh                           远程部署器(默认目标 37.38.39.8,一条命令修一台)
+│   └── case-yarbo-firmware-race.md                真实案例:开机竞速导致固件 ENOENT
+└── greengrass-ota-stuck-defer/                    Greengrass 部署"永久 defer"死锁(job 派了但版本不动)
+    ├── README.md                                  因果链 → 判定表 → 放行三层 → 回滚
+    ├── ota-stuck-defer.sh                         一键脚本(diagnose/allow/allow-force/restore/watch)
+    ├── deploy-remote.sh                           远程部署器(默认目标 192.168.0.16,含掉网容忍验证)
+    └── case-yarbo-ota-defer-deadlock.md           真实案例:云端漏发 set_ota_config 导致 job 永久 IN_PROGRESS
 ```
 
 当前收录的问题:
@@ -35,6 +40,7 @@ machine-repair/
 | 问题 | 症状指纹 |
 |---|---|
 | 蓝牙"僵尸 hci0" | `hciconfig` 有 `hci0`,但 `DOWN` + `BD Address: 00:00:00:00:00:00` + `Features` 全零 |
+| Greengrass 部署永久 defer | `service-update-deferred` 每 10~12s 刷一条 + `deployments/ongoing` 长时间不消失 + 目标版本包**已在位** |
 
 详见 `machine-repair/README.md`。
 
