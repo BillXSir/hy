@@ -26,6 +26,7 @@ machine-repair/
 └── bluetooth-dead-hci0/                           蓝牙"僵尸 hci0"(适配器在但从未初始化)
     ├── README.md                                  症状指纹 → 判定表 → 修复阶梯 → 回滚
     ├── bt-dead-hci0.sh                            一键脚本(diagnose/fix/install/uninstall)
+    ├── deploy-remote.sh                           远程部署器(默认目标 37.38.39.8,一条命令修一台)
     └── case-yarbo-firmware-race.md                真实案例:开机竞速导致固件 ENOENT
 ```
 

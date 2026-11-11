@@ -1,19 +1,27 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# deploy-remote.sh — 给一台新设备跑完蓝牙僵尸 hci0 的全流程
+# deploy-remote.sh — 给一台设备跑完蓝牙僵尸 hci0 的全流程
+#
+# 不带目标时默认连 YARBO@37.38.39.8（默认有线 IP 地址），所以常态操作就是:
+#   ./deploy-remote.sh --install --reboot
 #
 # 用法:
-#   ./deploy-remote.sh YARBO@10.0.0.5                     # 诊断 + 修当次（安全模式，不写文件）
-#   ./deploy-remote.sh YARBO@10.0.0.5 --install           # 再加开机自愈（默认顺带屏蔽 rtl_btusb）
-#   ./deploy-remote.sh YARBO@10.0.0.5 --install --reboot  # 装完重启并验证持久化生效
-#   ./deploy-remote.sh YARBO@10.0.0.5 --no-blacklist --install
-#   ./deploy-remote.sh YARBO@10.0.0.5 --uninstall         # 回滚持久化改动
-#   ./deploy-remote.sh YARBO@10.0.0.5 --diagnose          # 纯只读
+#   ./deploy-remote.sh                            # 诊断 + 修当次（安全模式，不写文件）
+#   ./deploy-remote.sh --install                  # 再加开机自愈（默认顺带屏蔽 rtl_btusb）
+#   ./deploy-remote.sh --install --reboot         # 装完重启并验证持久化生效
+#   ./deploy-remote.sh --diagnose                 # 纯只读
+#   ./deploy-remote.sh --uninstall                # 回滚持久化改动
+#   ./deploy-remote.sh --no-blacklist --install   # 不屏蔽厂商模块
+#
+#   换一台设备时把 user@host 作为第一个参数:
+#   ./deploy-remote.sh YARBO@10.0.0.6 --install --reboot
 #
 # 只依赖系统自带 ssh / scp。密码交互输入，靠 ControlMaster 复用，整个流程只输一次。
 # 脚本里不含任何凭据。
 # ==============================================================================
 set -u
+
+DEFAULT_TARGET="YARBO@37.38.39.8"   # 默认有线 IP 地址
 
 SELF_DIR=$(cd "$(dirname "$0")" && pwd)
 SCRIPT="$SELF_DIR/bt-dead-hci0.sh"
@@ -25,10 +33,14 @@ DO_UNINSTALL=0
 DO_REBOOT=0
 MODE_ARG=""
 
-usage() { sed -n '3,17p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '3,20p' "$0" | sed 's/^# \{0,1\}//'; }
 
-[ $# -ge 1 ] || { usage; exit 2; }
-TARGET=$1; shift
+# 第一个参数若是 user@host 则作为目标，否则用默认目标（这样 --install 能直接跟在后面）
+if [ $# -ge 1 ] && [ "${1#-}" = "$1" ]; then
+  TARGET=$1; shift
+else
+  TARGET=$DEFAULT_TARGET
+fi
 # 容忍从文档里连占位符尖括号一起粘过来，例如 YARBO@<10.0.0.5>
 TARGET=${TARGET//[<>]/}
 case "$TARGET" in
@@ -106,4 +118,4 @@ fi
 echo
 echo "== 完成 =="
 echo "   判定表: OK=转查应用层 | ZOMBIE+RACE=装 --install | ZOMBIE+MISSING=补固件"
-echo "   下次同一台只需: ./deploy-remote.sh $TARGET --diagnose"
+echo "   下次复诊: ./deploy-remote.sh --diagnose        (换设备: ./deploy-remote.sh YARBO@10.0.0.6 --diagnose)"

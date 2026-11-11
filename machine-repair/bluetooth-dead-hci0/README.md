@@ -55,19 +55,25 @@ sudo ./bt-dead-hci0.sh --uninstall   # 回滚持久化改动
 
 ## 多台设备 / 远程速操作
 
-`deploy-remote.sh` 把「上传 → 诊断 → 持久化 → 重启验证」串成一条命令，适合一台接一台地修：
+`deploy-remote.sh` 把「上传 → 诊断 → 持久化 → 重启验证」串成一条命令。
+**默认目标是 `YARBO@37.38.39.8`（默认有线 IP 地址）**，所以常态操作不用带目标：
 
 ```bash
 cd machine-repair/bluetooth-dead-hci0
 
-./deploy-remote.sh YARBO@10.0.0.5                      # 诊断 + 修当次（安全模式，不写文件）
-./deploy-remote.sh YARBO@10.0.0.5 --install            # 再加开机自愈（默认顺带屏蔽 rtl_btusb）
-./deploy-remote.sh YARBO@10.0.0.5 --install --reboot   # 装完重启并验证持久化生效
-./deploy-remote.sh YARBO@10.0.0.5 --diagnose           # 只读复诊
-./deploy-remote.sh YARBO@10.0.0.5 --uninstall          # 回滚持久化改动
+./deploy-remote.sh                       # 诊断 + 修当次（安全模式，不写文件）
+./deploy-remote.sh --install             # 再加开机自愈（默认顺带屏蔽 rtl_btusb）
+./deploy-remote.sh --install --reboot    # 装完重启并验证持久化生效
+./deploy-remote.sh --diagnose            # 复诊，纯只读
+./deploy-remote.sh --uninstall           # 回滚持久化改动
+
+# 换一台设备：把 user@host 作为第一个参数
+./deploy-remote.sh YARBO@10.0.0.6 --install --reboot
 ```
 
-只依赖系统自带 `ssh` / `scp`；密码交互输入，用 ControlMaster 复用，整个流程只输一次。脚本里不含凭据。
+只依赖系统自带 `ssh` / `scp`；密码交互输入，用 ControlMaster 复用，整个流程只输一次（`--reboot` 后需再输一次）。脚本里不含凭据。
+
+默认目标写在脚本第 24 行 `DEFAULT_TARGET`，换产线或网段时改那一行即可。
 
 看第一次输出里的 verdict 决定要不要加 `--install`：
 

@@ -24,10 +24,10 @@
 |---|---|---|
 | `bluetooth-dead-hci0/` | `hciconfig` 有 `hci0`，但 `DOWN` + `BD Address: 00:00:00:00:00:00` + `Features` 全零 | `sudo ./bluetooth-dead-hci0/bt-dead-hci0.sh` |
 
-多台设备可以连带远程流程一起跑：
+多台设备可以连带远程流程一起跑（`deploy-remote.sh` 默认目标 `YARBO@37.38.39.8`，不带参数即可）：
 
 ```bash
-machine-repair/bluetooth-dead-hci0/deploy-remote.sh YARBO@10.0.0.5 --install --reboot
+machine-repair/bluetooth-dead-hci0/deploy-remote.sh --install --reboot
 ```
 
 ## 目录约定
@@ -58,4 +58,7 @@ machine-repair/
 
 ## 脱敏
 
-沿用仓库根目录的规则：设备 IP、登录凭据、序列号、MAC 后三段、客户名**一律不进仓库**，用占位符。脚本里不得出现任何密码；需要凭据时由执行者通过环境变量或交互输入提供。
+设备**有线/内网静态 IP 可以写进脚本**（例：`DEFAULT_TARGET="YARBO@37.38.39.8"`），省掉每次输参数 —— 这是唯一的例外。
+
+以下一律不进仓库：登录凭据 / 密码 / 密钥、设备序列号、完整 MAC、客户名与现场地址。
+脚本里不得出现任何密码；需要凭据时由执行者交互输入。
