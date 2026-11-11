@@ -84,7 +84,15 @@ rsudo() {
   if [ "$SUDO_MODE" = n ]; then rread "sudo -n $*"; else rrun "sudo $*"; fi
 }
 # 紧凑现状：单行机器可读，由远端脚本 --snapshot 产出（含版本/ongoing/defer 计数/uptime）
-snapshot() { rsudo "bash $REMOTE_SCRIPT --snapshot" 2>/dev/null; }
+# 注意：命令替换里没有 tty，ssh -t 取不到 pty 且 sudo 会卡在密码提示上，
+# 所以一律先试 sudo -n（免密，或已被前面的 sudo -v 缓存），失败才退回交互式。
+snapshot() {
+  local out
+  out=$(rread "sudo -n bash $REMOTE_SCRIPT --snapshot" 2>/dev/null)
+  [ -n "$out" ] || out=$(rrun "sudo bash $REMOTE_SCRIPT --snapshot" 2>/dev/null | tr -d '\r' | tail -1)
+  printf '%s' "$out"
+}
+field() { printf '%s\n' "$1" | tr ' ' '\n' | sed -n "s/^$2=//p" | head -1; }
 
 echo "== [1] 确认目标身份（防止默认 IP 上其实是另一台机器）=="
 rrun 'printf "   host=%s  kernel=%s\n" "$(hostname)" "$(uname -r)"; uptime | sed "s/^/   /"' \
@@ -119,6 +127,9 @@ fi
 echo "== [4] 诊断（只读：不写文件 / 不改数据库 / 不重启）=="
 rsudo "bash $REMOTE_SCRIPT --diagnose" || echo "   [!!] 诊断返回非 0，继续但请留意上面的输出"
 
+# 放行前记住本次部署 id（ongoing= 就是它），收尾时用它做成败断言
+OG_BEFORE=$(field "$CUR" ongoing)
+
 if [ "$DO_ALLOW" = 1 ]; then
   echo "== [5] 放行（会自动备份 ota DB）=="
   if [ -n "$DEPLOY_ID" ]; then
@@ -139,14 +150,14 @@ fi
 [ "$DO_VERIFY" = 1 ] || { echo "== [6] 跳过验证（--no-verify）=="; exit 0; }
 
 echo "== [6] 验证（设备会掉网/重启，这里一直等到部署收尾，最多 $((VERIFY_MAX_SEC/60)) 分钟）=="
-elapsed=0; online=0; last=""; done_ok=0
-while [ "$elapsed" -lt "$VERIFY_MAX_SEC" ]; do
-  if cur=$(snapshot 2>/dev/null) && [ -n "$cur" ]; then
+start=$SECONDS; online=0; last=""; done_ok=0
+while [ $((SECONDS - start)) -lt "$VERIFY_MAX_SEC" ]; do
+  elapsed=$((SECONDS - start))
+  if cur=$(snapshot) && [ -n "$cur" ]; then
     [ "$online" = 0 ] && { echo "   [ok] 设备在线（${elapsed}s）"; online=1; }
     [ "$cur" != "$last" ] && { echo "   ${elapsed}s  $cur"; last=$cur; }
     case "$cur" in
-      *"ongoing=none"*)
-        # ongoing 清空 = 这次部署收尾（成功则 prev_success 指向本次部署 id）
+      *"ongoing=none"*)   # ongoing 清空 = 本次部署收尾（成败看下面 prev_success）
         echo "   [ok] ongoing 已清空，部署收尾（${elapsed}s）"
         done_ok=1; break ;;
     esac
@@ -156,19 +167,26 @@ while [ "$elapsed" -lt "$VERIFY_MAX_SEC" ]; do
       online=0
     fi
   fi
-  sleep 15; elapsed=$((elapsed+15))
+  sleep 15
 done
 
 echo
 if [ "$done_ok" = 1 ]; then
+  PS=$(field "$last" prev_success)
+  NU=$(field "$last" nucleus)
+  YV=$(field "$last" yarbo)
   echo "== 完成：部署收尾 =="
-  echo "   $last"
-  case "$last" in
-    *"nucleus=2.17"*|*"nucleus=2.1"*) echo "   Nucleus 已升级（看上面 nucleus= 值）" ;;
-  esac
+  echo "   nucleus=$NU  yarbo=$YV"
+  if [ -n "${OG_BEFORE:-}" ] && [ "$OG_BEFORE" != none ]; then
+    if [ "$PS" = "$OG_BEFORE" ]; then
+      echo "   [ok] prev_success == 本次部署（$OG_BEFORE）=> 部署成功"
+    else
+      echo "   [!!] prev_success=$PS，不是本次部署（$OG_BEFORE）=> 可能失败并回滚了，查 greengrass.log"
+    fi
+  fi
   echo "   再确认一次版本: ./deploy-remote.sh"
 else
-  echo "== [!!] ${VERIFY_MAX_SEC}s 内未收敛，人工确认设备状态 =="
+  echo "== [!!] $((SECONDS - start))s 内未收敛，人工确认设备状态 =="
   echo "   设备可能已重启但未回网；恢复后跑 ./deploy-remote.sh 复诊"
 fi
 echo

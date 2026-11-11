@@ -310,7 +310,7 @@ case "$VERDICT" in
     ok "verdict=OK 没有卡住的部署，也没有 defer 风暴"
     say "   如果云图上仍显示没更新，问题不在本机：先确认 IoT job 是否真的派到了这台 thing" ;;
   IN_PROGRESS)
-    ok "verdict=IN_PROGRESS 有进行中的部署，但没看到 defer 风暴"
+    ok "verdict=IN_PROGRESS 有进行中的部署（${DEPLOY_ID:-?}），但没看到 defer 风暴"
     say "   部署正在正常跑：等它完成，用 --watch 跟日志；长时间无进展再回来跑一次" ;;
   DEFER_DEADLOCK)
     bad "verdict=DEFER_DEADLOCK 部署被组件无限 defer，不会自己好，也不会超时回滚"

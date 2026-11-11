@@ -152,6 +152,11 @@ sudo sqlite3 /userdata/updates_db/updates.db \
 > `greengrass-cli` 在部署高峰期会 `Unable to create ipc client (TimeoutException)`，
 > **别拿它当唯一判据** —— 直接读 `effectiveConfig.yaml` 最稳。
 
+`deploy-remote.sh --allow` 会自动做**成败断言**：放行前记下 `ongoing=<本次部署 id>`，
+收尾后若 `previous-success` 等于它才算成功；否则提示"可能失败并回滚了"。
+这比只看"ongoing 没了"可靠——回滚同样会让 ongoing 消失。
+
+
 ## 回滚
 
 ```bash
