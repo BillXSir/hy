@@ -29,6 +29,12 @@ usage() { sed -n '3,17p' "$0" | sed 's/^# \{0,1\}//'; }
 
 [ $# -ge 1 ] || { usage; exit 2; }
 TARGET=$1; shift
+# 容忍从文档里连占位符尖括号一起粘过来，例如 YARBO@<10.0.0.5>
+TARGET=${TARGET//[<>]/}
+case "$TARGET" in
+  *@?*) ;;
+  *) echo "目标格式应为 user@host，例如 YARBO@10.0.0.5（不要带尖括号）" >&2; exit 2 ;;
+esac
 
 for a in "$@"; do
   case "$a" in
